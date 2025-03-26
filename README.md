@@ -23,19 +23,6 @@ source .venv/bin/activate   # Linux/Mac
 ```bash
 pip install -r requirements.txt
 ```
-### Directory Structure
-```arduino
-dashbaord-bike_sharing/
-├───dashboard
-| └───dashboard.py
-├───data
-| ├───day.csv
-| └───hour.csv
-├───Proyek Analisis Data.ipynb
-├───README.md
-└───requirements.txt
-└───url.txt
-```
 ### Run Streamlit App
 ```bash
 streamlit run dashboard/dashboard.py
