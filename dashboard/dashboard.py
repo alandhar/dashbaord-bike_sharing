@@ -7,89 +7,114 @@ import seaborn as sns
 day = pd.read_csv("./data/day.csv")
 hour = pd.read_csv("./data/hour.csv")
 
-# Preprocessing
+# Cleaning & Preprocessing
 hour['dteday'] = pd.to_datetime(hour['dteday'])
 day['dteday'] = pd.to_datetime(day['dteday'])
 
-# Sidebar
-st.sidebar.title("Filter Dashboard")
-user_type = st.sidebar.selectbox("Pilih Tipe Pengguna", ["Semua", "casual", "registered"])
+# Map categorical values
 weather_map = {
-    1: "Cerah / Sedikit Awan",
-    2: "Berkabut / Mendung",
-    3: "Hujan Ringan / Salju Ringan",
-    4: "Hujan Lebat / Salju Lebat"
+    1: "Clear / Few Clouds",
+    2: "Mist / Cloudy",
+    3: "Light Rain / Snow",
+    4: "Heavy Rain / Snow"
 }
 season_map = {1: "Spring", 2: "Summer", 3: "Fall", 4: "Winter"}
+workingday_map = {0: "Libur / Akhir Pekan", 1: "Hari Kerja"}
+
 hour['season'] = hour['season'].map(season_map)
 hour['weathersit'] = hour['weathersit'].map(weather_map)
+hour['workingday_label'] = hour['workingday'].map(workingday_map)
 
-# Header
+# Sidebar filters
+st.sidebar.title("Filter Dashboard")
+user_type = st.sidebar.multiselect("Pilih Tipe Pengguna", ["Casual", "Registered"], default=["Casual", "Registered"])
+selected_workingday = st.sidebar.multiselect("Pilih Jenis Hari", ["Hari Kerja", "Libur / Akhir Pekan"], default=["Hari Kerja", "Libur / Akhir Pekan"])
+
+# Filter data sesuai pilihan
+filtered_hour = hour.copy()
+filtered_hour = filtered_hour[filtered_hour['workingday_label'].isin(selected_workingday)]
+
+# Streamlit Page Setup
 st.title("Bike Sharing Dashboard")
-st.markdown("### Ringkasan Statistik")
 
-# Summary stats
-total_cnt = day['cnt'].sum()
+# Summary Metrics
+st.subheader("Summary Metrics")
+total_rentals = day['cnt'].sum()
 total_casual = day['casual'].sum()
 total_registered = day['registered'].sum()
 
 col1, col2, col3 = st.columns(3)
-col1.metric("Total Peminjaman", f"{total_cnt:,}")
-col2.metric("Pengguna Casual", f"{total_casual:,}")
-col3.metric("Pengguna Registered", f"{total_registered:,}")
+col1.metric("Total Rentals", f"{total_rentals:,}")
+col2.metric("Casual Users", f"{total_casual:,}")
+col3.metric("Registered Users", f"{total_registered:,}")
 
-# Section 2 - Peminjaman Berdasarkan Waktu
+# Section - Peminjaman Berdasarkan Jam dan Workingday
 st.markdown("---")
-st.subheader("Peminjaman Berdasarkan Waktu")
+st.subheader("Rata-rata Peminjaman per Jam Berdasarkan Jenis Hari")
 fig, ax = plt.subplots(figsize=(15, 8))
-hour_avg = hour.groupby('hr').agg({'casual': 'mean', 'registered': 'mean', 'cnt': 'mean'}).reset_index()
+grouped = filtered_hour.groupby(['hr', 'workingday_label']).agg({
+    'casual': 'mean',
+    'registered': 'mean',
+    'cnt': 'mean'
+}).reset_index()
 
-if user_type == "casual":
-    sns.lineplot(data=hour_avg, x='hr', y='casual', label='Casual', ax=ax)
-elif user_type == "registered":
-    sns.lineplot(data=hour_avg, x='hr', y='registered', label='Registered', ax=ax)
+if user_type == ["Casual"]:
+    sns.lineplot(data=grouped, x='hr', y='casual', hue='workingday_label', ax=ax, marker='o')
+elif user_type == ["Registered"]:
+    sns.lineplot(data=grouped, x='hr', y='registered', hue='workingday_label', ax=ax, marker='o')
 else:
-    sns.lineplot(data=hour_avg, x='hr', y='cnt', label='Total', ax=ax)
+    sns.lineplot(data=grouped, x='hr', y='cnt', hue='workingday_label', ax=ax, marker='o')
 
 ax.set_xlabel("Jam")
 ax.set_ylabel("Rata-rata Jumlah Peminjaman")
-ax.set_title("Rata-rata Peminjaman per Jam")
+ax.set_title("Rata-rata Peminjaman Sepeda per Jam")
+ax.legend(title="Jenis Hari")
+ax.grid(True)
+plt.tight_layout() 
 st.pyplot(fig)
 
-# Section 3 - Cuaca
 st.markdown("---")
-st.subheader("Pengaruh Kondisi Cuaca")
+st.subheader("Tren Harian Peminjaman: Casual vs Registered vs Total")
+day_filtered = day.copy()
 fig, ax = plt.subplots(figsize=(15, 8))
-if user_type == "Semua":
-    sns.boxplot(data=hour, x='weathersit', y='cnt', ax=ax)
+if user_type == ["Casual"]:
+    ax.plot(day_filtered['dteday'], day_filtered['casual'], label='Casual', color='skyblue')
+elif user_type == ["Registered"]:
+    ax.plot(day_filtered['dteday'], day_filtered['registered'], label='Registered', color='orange')
 else:
-    sns.boxplot(data=hour, x='weathersit', y=user_type, ax=ax)
+    if set(user_type) == {"Casual", "Registered"}:
+        ax.plot(day_filtered['dteday'], day_filtered['cnt'], label='Total', color='green')
+ax.set_xlabel('Tanggal')
+ax.set_ylabel('Jumlah Peminjaman')
+ax.set_title('Tren Peminjaman Sepeda per Hari')
+ax.legend()
+ax.grid(True)
+plt.tight_layout()
+st.pyplot(fig)
+
+
+# Section - Rata-rata Peminjaman Berdasarkan Cuaca
+st.markdown("---")
+st.subheader("Pengaruh Kondisi Cuaca terhadap Jumlah Peminjaman")
+weather_avg = filtered_hour.groupby('weathersit').agg({'cnt': 'mean'}).reset_index()
+fig, ax = plt.subplots(figsize=(15, 10))
+sns.barplot(data=weather_avg, x='weathersit', y='cnt', palette='Set2', ax=ax)
 ax.set_xlabel("Kondisi Cuaca")
-ax.set_ylabel("Jumlah Peminjaman")
-ax.set_title("Pengaruh Cuaca terhadap Jumlah Peminjaman")
+ax.set_ylabel("Rata-rata Peminjaman")
+ax.set_title("Rata-rata Jumlah Peminjaman Sepeda per Kondisi Cuaca")
 st.pyplot(fig)
 
-# Section 4 - Musim & Bulan
+# Section - Rata-rata Peminjaman Berdasarkan Musim
 st.markdown("---")
-st.subheader("Distribusi Peminjaman per Musim dan Bulan")
-fig, ax = plt.subplots(figsize=(15, 8))
-if user_type == "Semua":
-    sns.boxplot(data=hour, x='season', y='cnt', ax=ax)
-else:
-    sns.boxplot(data=hour, x='season', y=user_type, ax=ax)
+st.subheader("Distribusi Peminjaman Berdasarkan Musim")
+season_avg = filtered_hour.groupby('season').agg({'cnt': 'mean'}).reset_index()
+fig, ax = plt.subplots(figsize=(15, 10))
+sns.barplot(data=season_avg, x='season', y='cnt', palette='pastel', ax=ax)
 ax.set_xlabel("Musim")
-ax.set_ylabel("Jumlah Peminjaman")
-ax.set_title("Distribusi Jumlah Peminjaman Berdasarkan Musim")
+ax.set_ylabel("Rata-rata Peminjaman")
+ax.set_title("Rata-rata Jumlah Peminjaman Sepeda per Musim")
 st.pyplot(fig)
 
-# Section 5 - Perbandingan Casual vs Registered
+# Footer
 st.markdown("---")
-st.subheader("Perbandingan Pengguna Casual vs Registered")
-total_users = pd.DataFrame({
-    'Tipe Pengguna': ['casual', 'registered'],
-    'Total Peminjaman': [total_casual, total_registered]
-})
-fig, ax = plt.subplots(figsize=(15, 8))
-sns.barplot(data=total_users, x='Tipe Pengguna', y='Total Peminjaman', palette='pastel', ax=ax)
-ax.set_title("Total Peminjaman berdasarkan Tipe Pengguna")
-st.pyplot(fig)
+st.caption("Bike Sharing Dashboard | Dataset: Capital Bikeshare")
